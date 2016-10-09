@@ -286,7 +286,6 @@ namespace FMPDemo {
                 // Yes, I'm "sending" references to the Server's objects...
                 // Skipping serialization for this example program.
                 const msg = new WorldState(this.entities, this.lastProcessedInputSeqNums);
-                console.log(`using lag ${client.lagMs} to send to client ${client.cssId}`);
                 client.network.send(client.lagMs, msg);
             });
         }
