@@ -1,4 +1,5 @@
-dist
+*.iml
 .idea
+dist
 typings
 node_modules
