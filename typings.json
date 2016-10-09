@@ -1,0 +1,5 @@
+{
+  "globalDevDependencies": {
+    "immutable": "registry:dt/immutable#3.8.1+20160608070634"
+  }
+}

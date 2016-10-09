@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Clone of Gabriel Gabmetta's Fast-Paced Multiplayer demo</title>
+    <style>
+        canvas {
+            border: dotted 1px;
+            padding:0;
+            background: lightgray;
+        }
+
+        .lag {
+            width: 50px;
+        }
+
+        #server .tickRate {
+            width: 50px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Multiplayer client/server demo</h1>
+    <p>Clone (with a few changes) of <a href="http://www.gabrielgambetta.com/fpm_live.html">Gabriel
+    Gambetta's original demo</a>.  His series of articles explaining <a
+    href="http://www.gabrielgambetta.com/fast_paced_multiplayer.html">Fast-Paced
+    Multiplayer games</a> is an excellent read.</p>
+
+    <p>I made this clone in order to better understand the concepts shown in
+    the original, and to learn about running TypeScript projects.</p>
+
+    <h2>Game views</h2>
+
+    <div id="p1">
+        <h3>Player 1 (move with: q, e)</h3>
+        <label> Lag <input class="lag" type="text" value="250"> ms</label> /
+        <label><input class="prediction" type="checkbox"> prediction</label> /
+        <label><input class="reconciliation" type="checkbox"> reconciliation</label>
+        <br>
+        <canvas width=960 height=100></canvas>
+        <div class="status">Non-ackd inputs: <span class="non-ackd">0</span></div>
+    </div>
+
+    <div id="p2">
+        <h3>Player 2 (move with: q, e)</h3>
+        <label> Lag <input class="lag" type="text" value="250"> ms</label> /
+        <label><input class="prediction" type="checkbox" checked> prediction</label> /
+        <label><input class="reconciliation" type="checkbox"> reconciliation</label>
+        <br>
+        <canvas width=960 height=100></canvas>
+        <div class="status">Non-ackd inputs: <span class="non-ackd">0</span></div>
+    </div>
+
+    <div id="p3">
+        <h3>Player 1 (move with: q, e)</h3>
+        <label> Lag <input class="lag" type="text" value="250"> ms</label> /
+        <label><input class="prediction" type="checkbox" checked> prediction</label> /
+        <label><input class="reconciliation" type="checkbox" checked> reconciliation</label>
+        <br>
+        <canvas width=960 height=100></canvas>
+        <div class="status">Non-ackd inputs: <span class="non-ackd">0</span></div>
+    </div>
+
+    <br>
+    <hr>
+
+    <div id="server">
+        <h3>Server</h3>
+        <label>Update rate: <input class="tickRate" type="text" value="1"> per second</label>
+        <br>
+        <canvas id="serverCanvas" width=960 height=100></canvas>
+    </div>
+
+    <script src="./dist/bundle.js"></script>
+</body>
+</html>
