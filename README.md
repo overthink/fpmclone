@@ -10,7 +10,6 @@ Not ready.
 ## Development
 
 * `npm install`
-* `npm run setup`
 * `npm run build:watch`
 * Then, in another terminal run a web server in the project root (I use
   `python -m SimpleHTTPServer`)

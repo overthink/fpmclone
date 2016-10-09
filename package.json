@@ -13,7 +13,8 @@
     "webpack": "^1.13.2"
   },
   "scripts": {
-    "setup": "node_modules/.bin/typings install",
+    "typings": "node_modules/.bin/typings install",
+    "postinstall": "npm run typings",
     "build": "webpack",
     "build:watch": "webpack -w",
     "clean": "rm ./dist/*"
