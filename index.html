@@ -17,10 +17,16 @@
         #server .tickRate {
             width: 50px;
         }
+
+        body {
+            width: 960px;
+            margin-left: 50px;
+            margin-right: 50px;
+        }
     </style>
 </head>
 <body>
-    <h1>Multiplayer client/server demo (<a href="https://github.com/overthink/fpmclone">source</a>)</h1>
+    <h1>Fast multiplayer client/server demo</h1>
 
     <p>Clone of <a href="http://www.gabrielgambetta.com/fpm_live.html">Gabriel
     Gambetta's original demo</a>, adding entity interpolation.  I made this in
@@ -31,7 +37,8 @@
     this.</p>
 
     <p>Disclaimer: I'm not a game developer, and this is the first gamey thing
-    I've tried, so beware of the code.</p>
+    I've tried, so beware of the <a
+    href="https://github.com/overthink/fpmclone">code</a>.</p>
 
     <p>Writeup <a href="#discussion">below</a> with ideas to try out with this.</p>
 
@@ -75,7 +82,7 @@
     <br>
 
     <div id="server">
-        <h3>Server (autoritative state)</h3>
+        <h3>Server (authoritative state)</h3>
         <label>Update rate (aka tick rate): <input class="tickRate" type="text" value="1"> per second</label>
         <br>
         <canvas id="serverCanvas" width=960 height=100></canvas>
@@ -89,11 +96,12 @@
     prediction and input reconciliation. (Same as Gabriel's original
     demo.)</p>
 
-    <p>Now observe player 3's view as you move player 1 a& 2 around.  Note how
-    players  1 and 2 move smoothly -- but delayed -- compared to everyone
-    else's view.  This is entity interpolation at work.</p>
+    <p>Now observe player 3's view as you move player 1 & 2 around.  Note how
+    players 1 and 2 move smoothly -- but delayed -- in player 3's view
+    compared to everyone else's view.  This is entity interpolation (EI) at
+    work.</p>
 
-    <p>Turn entity interpolation on for all players, but give player 1 and 2
+    <p>Turn EI on for all players, but give player 1 and 2
     very different lag values (say 2000 ms, and 20ms).  Then move player 3
     around and observe how the other players see the state of the world.  Note
     how the high-lag player's view of the world is considerably delayed, but
@@ -105,6 +113,26 @@
     <p>TODO: add something to demonstrate lag compensation, the remaining
     concept from the article series that is not demonstrated.</p>
 
+    <h2>What's with the weird "easing" when EI is on and server update frequency is small?</h2>
+
+    <p>I thought this was a bug at first, but it's working as designed.  It's
+    a limitation of our naive interpolation function and world state.  When
+    world state updates only arrive very infrequently, like once a second,
+    players using EI assume a past movement occurred at uniform speed over the
+    entire time between world states.  For example, assume the server sends
+    world states updates every second, and player 3 is using EI.  If player 1,
+    e.g., moves a tiny bit over 100ms and then stops, player 3 will see that
+    tiny movement in world state updates that are one second apart, and our
+    interpolation function will drag out the tiny movement over a period of
+    one second instead of 100 ms.  If you set the server update rate to be
+    something slightly more aggressive, like 5 times a second, this effect is
+    much less noticeable.  At 20 times a second it's invisible. Another fix
+    would be to send a more detailed world state that includes where the
+    player was every 10 ms or something. (This is mentioned in the <a
+    href="http://www.gabrielgambetta.com/fpm3.html#entity-interpolation">original
+    articles</a>, but I had to learn the hard way, as usual.)</p>
+
     <script src="./dist/bundle.js"></script>
+
 </body>
 </html>

@@ -174,7 +174,7 @@ namespace FMPDemo {
                             if (lastProcessed) {
                                 // First, keep inputs that have not yet been taken
                                 // into account by the last WorldState sent by the
-                                // server.s
+                                // server.
                                 this.pendingInputs = this.pendingInputs.filter(input => {
                                     return input.seqNum > lastProcessed;
                                 });
@@ -471,7 +471,7 @@ namespace FMPDemo {
         private static updateParameters(server: Server, clients: Array<Client>): void {
             // update server params
             const serverTickRate = Util.cast(document.querySelector("#server .tickRate"), HTMLInputElement);
-            server.setTickRate(parseInt(serverTickRate.value));
+            server.setTickRate(parseFloat(serverTickRate.value));
 
             // update params for each client
             for (let i = 1; i <= clients.length; ++i) {
