@@ -5,7 +5,9 @@
 namespace FMPDemo {
 
     /** Something sent over the "wire".  Just a marker for now. */
-    interface Message {}
+    interface Message {
+        seqNum: number;
+    }
 
     /** Input from a client. Gets sent to the server. */
     class Input implements Message {
@@ -39,18 +41,40 @@ namespace FMPDemo {
         applyInput(input: Input): void {
             this.x += input.pressTime * this.speed;
         }
+
+        /** Return a copy of this entity. */
+        copy(): Entity {
+            const e = new Entity(this.id, this.color);
+            e.x = this.x;
+            e.speed = this.speed;
+            return e;
+        }
     }
 
     class WorldState implements Message {
+        seqNum: number;
         entities: Array<Entity>;
 
         /** Last input the server has processed from the client to which the
          * WorldState message is sent. */
         lastProcessedInputSeqNums: Array<number>;
 
-        constructor(entities: Array<Entity>, lastProcessedInputSeqNums: Array<number>) {
+        constructor(seqNum: number, entities: Array<Entity>, lastProcessedInputSeqNums: Array<number>) {
+            this.seqNum = seqNum;
             this.entities = entities;
             this.lastProcessedInputSeqNums = lastProcessedInputSeqNums;
+        }
+    }
+
+    class SavedWorldState {
+        /**
+         * The time at which the client processed this WorldState message.
+         */
+        processedTs: number;
+        value: WorldState;
+        constructor(processedTs: number, value: WorldState) {
+            this.processedTs = processedTs;
+            this.value = value;
         }
     }
 
@@ -64,13 +88,13 @@ namespace FMPDemo {
         messages: Array<QueuedMessage> = [];
 
         /** Returns next message "received" from the network, if any. */
-        receive(): Message | undefined {
+        receive(): QueuedMessage | undefined {
             let now = Date.now();
             for (let i = 0; i < this.messages.length; ++i) {
                 var qm = this.messages[i];
                 if (qm.recvTs <= now) {
                     this.messages.splice(i, 1);
-                    return qm.payload;
+                    return qm;
                 }
             }
         }
@@ -90,27 +114,25 @@ namespace FMPDemo {
         nonAckdInputsElement: Element;
         server?: Server;
         tickRate: number = 60;
-
         // Why is there `entityId` and also `entity.id`?  Good question.
         // `entityId` is assigned by the server when the connection is made.
         // It is later used to retreive state data for this client from
         // WorldState messages.
         entityId?: number;  // TODO: extremely inconvenient allowing this to have undefined value
-
-        // The player's entity in the world; server provides it.
-        entity?: Entity;
+        entity?: Entity; // The player's entity in the world; server provides it.
         entities: Array<Entity> = []; // awful, contains reference to this.entity as well
-
         leftKeyDown: boolean = false;
         rightKeyDown: boolean = false;
         network: LagNetwork = new LagNetwork;
+        lagMs: number = 250;
         lastUpdateTs: number = -1;
         inputSeqNum: number = 0;
         pendingInputs: Array<Input> = [];
-
+        curWorldState?: SavedWorldState;  // the last state we received from the server
+        prevWorldState?: SavedWorldState; // penultimate state from server, used for entity interpolation
         usePrediction: boolean = false;
         useReconciliation: boolean = false;
-        lagMs: number = 250;
+        useEntityInterpolation: boolean = false;
         private updateTimer?: number;
 
         constructor(cssId: string, color: string, canvas: HTMLCanvasElement, nonAckdInputsElement: Element) {
@@ -124,9 +146,8 @@ namespace FMPDemo {
             while (true) {
                 const msg = this.network.receive();
                 if (!msg) break;
-
-                const worldState = Util.cast(msg, WorldState);
-                worldState.entities.forEach(entity => {
+                const worldState = Util.cast(msg.payload, WorldState);
+                worldState.entities.forEach((entity, idx) => {
                     if (this.entityId === undefined) return; // making tsc happy...
 
                     if (entity.id === this.entityId) {
@@ -166,20 +187,12 @@ namespace FMPDemo {
 
                     } else {
                         // non-local-player entity
-
-                        // what I should be doing is creating a local entity
-                        // for every remote entity I haven't seen before, then
-                        // update all my local entities, and finally drop any
-                        // local entities that aren't mentioned in the server
-                        // message.
-
-                        // this sucks with the current data structures...
-                        // would like to just wholesale replace all local
-                        // state with what the server sent
-
                         this.entities[entity.id] = entity;
                     }
                 });
+                // update prev and current states for later entity interpolation
+                this.prevWorldState = this.curWorldState;
+                this.curWorldState = new SavedWorldState(Date.now(), worldState);
             }
         }
 
@@ -207,22 +220,67 @@ namespace FMPDemo {
             this.server.network.send(this.lagMs, input);
 
             if (this.usePrediction) {
+                // optimistically apply our input (assume server will accept it)
                 this.entity.applyInput(input);
             }
 
-            // save input for later reconciliation
             if (this.useReconciliation) {
+                // Save input for later reconciliation. We'll need to re-apply
+                // some of our optimistically applied inputs after we next
+                // hear from the server.
                 this.pendingInputs.push(input);
             }
         }
 
+        // log only for a specific client (debug)
+        private log(id: number, ...args: any[]): void {
+            if (this.cssId === 'p' + id.toString()) {
+                console.log(`${Date.now()} - client p${id}:`, ...args);
+            }
+        }
+
+        private interpolateEntities(): void {
+            if (this.prevWorldState === undefined) return;
+            if (this.curWorldState === undefined) return;
+
+            // Recall: "each player sees itself in the present but sees the
+            // other entities in the past"
+            // (http://www.gabrielgambetta.com/fpm3.html) so figure out how
+            // far beyond the most recent server state we are right now, then
+            // interpolate everyone else that amount of time between prev and
+            // cur server states (i.e. one update behind).
+            const now = Date.now();
+            const delta = now - this.curWorldState.processedTs;
+            if (delta <= 0) return;
+
+            const statesDelta = this.curWorldState.processedTs - this.prevWorldState.processedTs;
+            if (statesDelta <= 0) return;
+
+            const prev = Util.cast(this.prevWorldState.value, WorldState);
+            const cur = Util.cast(this.curWorldState.value, WorldState);
+
+            for (let i = 0; i < cur.entities.length; ++i) {
+                const curEntity = cur.entities[i];
+                if (curEntity.id === this.entityId) continue; // don't interpolate self
+                const prevEntity = prev.entities[i]; // assumes the set of entities never changes
+                const newEntity = curEntity.copy();
+                newEntity.x = prevEntity.x + ((delta/statesDelta) * (curEntity.x - prevEntity.x));
+                newEntity.speed = prevEntity.speed + ((delta / statesDelta) * (curEntity.speed - prevEntity.speed));
+                this.entities[i] = newEntity;
+            }
+        }
+
         render(): void {
+            this.log(3, 'render', this.entities[0].color, this.entities[0].x);
             Util.render(this.canvas, this.entities, this.entities.length);
         }
 
         update(): void {
             this.processServerMessages();
             if (!this.entity) return; // not connected yet
+            if (this.useEntityInterpolation) {
+                this.interpolateEntities();
+            }
             this.processInputs();
             this.render();
             this.nonAckdInputsElement.textContent = this.pendingInputs.length.toString();
@@ -241,7 +299,8 @@ namespace FMPDemo {
         lastProcessedInputSeqNums: Array<number>= []; // last processed input's seq num, by entityId
         network: LagNetwork = new LagNetwork;  // server's network (where it receives inputs from clients)
         private tickRate: number = 5;
-        private updateTimer?: number;
+        private updateTimer: number | undefined;
+        private worldStateSeq: number = 0;
 
         constructor(canvas: HTMLCanvasElement) {
             this.canvas = canvas;
@@ -269,8 +328,8 @@ namespace FMPDemo {
         processInputs(): void {
             while (true) {
                 const msg = this.network.receive();
-                if (msg === undefined) break;
-                const input = Util.cast(msg, Input);
+                if (!msg) break;
+                const input = Util.cast(msg.payload, Input);
                 if (!input) break;
                 if (Server.validateInput(input)) {
                     const id = input.entityId;
@@ -282,10 +341,15 @@ namespace FMPDemo {
 
         /** Send world state to every client. */
         sendWorldState(): void {
+            // Make sure to send copies of our state, and not just references.
+            // i.e. simulate serializing the data like we'd do if we were
+            // using a real network.
+            const msg = new WorldState(
+                this.worldStateSeq++,
+                this.entities.map(e => e.copy()),
+                this.lastProcessedInputSeqNums.slice()
+            );
             this.clients.forEach(client => {
-                // Yes, I'm "sending" references to the Server's objects...
-                // Skipping serialization for this example program.
-                const msg = new WorldState(this.entities, this.lastProcessedInputSeqNums);
                 client.network.send(client.lagMs, msg);
             });
         }
@@ -302,7 +366,7 @@ namespace FMPDemo {
 
         setTickRate(x: number): void {
             this.tickRate = x;
-            if (this.updateTimer) {
+            if (this.updateTimer !== undefined) {
                 clearInterval(this.updateTimer);
             }
             this.startUpdateTimer();
@@ -313,7 +377,7 @@ namespace FMPDemo {
         }
         
         start(): void {
-             this.startUpdateTimer();
+            this.setTickRate(this.tickRate);
         }
 
     }
@@ -379,7 +443,6 @@ namespace FMPDemo {
             const keyHandler: EventListener = e => {
                 const e0: Event = e || window.event;
                 if (e0 instanceof KeyboardEvent) {
-                    // console.log(cssId, c.cssId, e0.keyCode);
                     if (e0.keyCode === leftKeyCode) {
                         c.leftKeyDown = (e0.type === "keydown");
                     } else if (e0.keyCode === rightKeyCode) {
@@ -411,6 +474,7 @@ namespace FMPDemo {
                 client.lagMs = parseInt(getInput('.lag').value);
                 client.usePrediction = getInput('.prediction').checked;
                 client.useReconciliation = getInput('.reconciliation').checked;
+                client.useEntityInterpolation = getInput('.entity-interpolation').checked;
             }
         }
 
