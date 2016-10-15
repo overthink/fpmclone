@@ -1,11 +1,11 @@
 # Fast Paced Multiplayer demo (clone)
 
 Clone of http://www.gabrielgambetta.com/fpm_live.html in TypeScript 2.0, with
-more than one "player".
+more than one "player" and entity interpolation.
 
 ## Status
 
-Not ready.
+It works!
 
 ## Development
 

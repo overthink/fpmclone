@@ -1,7 +1,5 @@
-// A note on this code: I'm teaching myself TypeScript, "modern" JS dev, and
-// basic game programming as I go, so the level of commenting in here is a bit
-// overkill.  Hopefully it's still somewhat readable.
-
+// Disclaimer: I'm not a game developer and I'm just learning TypeScript, so
+// treat this code with extra suspicion.
 namespace FMPDemo {
 
     /** Something sent over the "wire".  Just a marker for now. */
@@ -146,9 +144,12 @@ namespace FMPDemo {
             while (true) {
                 const msg = this.network.receive();
                 if (!msg) break;
-                const worldState = Util.cast(msg.payload, WorldState);
-                worldState.entities.forEach((entity, idx) => {
-                    if (this.entityId === undefined) return; // making tsc happy...
+                const incoming = Util.cast(msg.payload, WorldState);
+
+                for (let i = 0; i < incoming.entities.length; ++i) {
+                    const entity = incoming.entities[i];
+
+                    if (this.entityId === undefined) break; // pointless, but tsc unhappy without this
 
                     if (entity.id === this.entityId) {
                         // entity is the remote state for our local this.entity object
@@ -169,13 +170,15 @@ namespace FMPDemo {
                         if (this.useReconciliation) {
                             // i.e. reapply all inputs not yet ackd by server
 
-                            // First, keep inputs that have not yet been taken
-                            // into account by the last WorldState sent by the
-                            // server.
-                            const lastProcessed = worldState.lastProcessedInputSeqNums[this.entityId];
-                            this.pendingInputs = this.pendingInputs.filter(input => {
-                                return input.seqNum > lastProcessed;
-                            });
+                            const lastProcessed = incoming.lastProcessedInputSeqNums[this.entityId];
+                            if (lastProcessed) {
+                                // First, keep inputs that have not yet been taken
+                                // into account by the last WorldState sent by the
+                                // server.s
+                                this.pendingInputs = this.pendingInputs.filter(input => {
+                                    return input.seqNum > lastProcessed;
+                                });
+                            }
 
                             // apply any remaining inputs to our local world state
                             this.pendingInputs.forEach(input => {
@@ -189,10 +192,10 @@ namespace FMPDemo {
                         // non-local-player entity
                         this.entities[entity.id] = entity;
                     }
-                });
+                }
                 // update prev and current states for later entity interpolation
                 this.prevWorldState = this.curWorldState;
-                this.curWorldState = new SavedWorldState(Date.now(), worldState);
+                this.curWorldState = new SavedWorldState(Date.now(), incoming);
             }
         }
 
@@ -233,11 +236,11 @@ namespace FMPDemo {
         }
 
         // log only for a specific client (debug)
-        private log(id: number, ...args: any[]): void {
-            if (this.cssId === 'p' + id.toString()) {
-                console.log(`${Date.now()} - client p${id}:`, ...args);
-            }
-        }
+        // private log(id: number, ...args: any[]): void {
+        //     if (this.cssId === 'p' + id.toString()) {
+        //         console.log(`${Date.now()} - client p${id}:`, ...args);
+        //     }
+        // }
 
         private interpolateEntities(): void {
             if (this.prevWorldState === undefined) return;
@@ -251,10 +254,9 @@ namespace FMPDemo {
             // cur server states (i.e. one update behind).
             const now = Date.now();
             const delta = now - this.curWorldState.processedTs;
-            if (delta <= 0) return;
-
             const statesDelta = this.curWorldState.processedTs - this.prevWorldState.processedTs;
-            if (statesDelta <= 0) return;
+            let interpFactor = delta / statesDelta;
+            if (interpFactor === Infinity) interpFactor = 1; // If it'll let us div 0, why not
 
             const prev = Util.cast(this.prevWorldState.value, WorldState);
             const cur = Util.cast(this.curWorldState.value, WorldState);
@@ -264,14 +266,13 @@ namespace FMPDemo {
                 if (curEntity.id === this.entityId) continue; // don't interpolate self
                 const prevEntity = prev.entities[i]; // assumes the set of entities never changes
                 const newEntity = curEntity.copy();
-                newEntity.x = prevEntity.x + ((delta/statesDelta) * (curEntity.x - prevEntity.x));
-                newEntity.speed = prevEntity.speed + ((delta / statesDelta) * (curEntity.speed - prevEntity.speed));
+                newEntity.x = prevEntity.x + (interpFactor * (curEntity.x - prevEntity.x));
+                newEntity.speed = prevEntity.speed + (interpFactor * (curEntity.speed - prevEntity.speed));
                 this.entities[i] = newEntity;
             }
         }
 
         render(): void {
-            this.log(3, 'render', this.entities[0].color, this.entities[0].x);
             Util.render(this.canvas, this.entities, this.entities.length);
         }
 
@@ -299,7 +300,7 @@ namespace FMPDemo {
         lastProcessedInputSeqNums: Array<number>= []; // last processed input's seq num, by entityId
         network: LagNetwork = new LagNetwork;  // server's network (where it receives inputs from clients)
         private tickRate: number = 5;
-        private updateTimer: number | undefined;
+        private updateTimer?: number;
         private worldStateSeq: number = 0;
 
         constructor(canvas: HTMLCanvasElement) {
@@ -318,7 +319,13 @@ namespace FMPDemo {
         }
 
         /** Look for cheaters here. */
-        private static validateInput(input: Input): boolean {
+        private static validInput(input: Input): boolean {
+            // Not exactly sure where 1/40 comes from.  I got it from the
+            // original code.  The longest possible valid "press" should be
+            // 1/client.tickRate (1/60).  But the JS timers are not reliable,
+            // so if you use 1/60 below you end up throwing out a lot of
+            // inputs that are slighly too long... so maybe that's where 1/40
+            // comes from?
             return Math.abs(input.pressTime) <= 1 / 40;
         }
 
@@ -331,10 +338,12 @@ namespace FMPDemo {
                 if (!msg) break;
                 const input = Util.cast(msg.payload, Input);
                 if (!input) break;
-                if (Server.validateInput(input)) {
+                if (Server.validInput(input)) {
                     const id = input.entityId;
                     this.entities[id].applyInput(input);
                     this.lastProcessedInputSeqNums[id] = input.seqNum;
+                } else {
+                    console.log('throwing out input!', input);
                 }
             }
         }

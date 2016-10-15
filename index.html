@@ -20,14 +20,22 @@
     </style>
 </head>
 <body>
-    <h1>Multiplayer client/server demo</h1>
+    <h1>Multiplayer client/server demo (<a href="https://github.com/overthink/fpmclone">source</a>)</h1>
+
     <p>Clone of <a href="http://www.gabrielgambetta.com/fpm_live.html">Gabriel
-    Gambetta's original demo</a>, adding entity interpolation.  His series of
-    articles explaining <a
+    Gambetta's original demo</a>, adding entity interpolation.  I made this in
+    order to better understand the original, and to learn about developing
+    TypeScript projects.  His series of articles explaining <a
     href="http://www.gabrielgambetta.com/fast_paced_multiplayer.html">Fast-Paced
     Multiplayer games</a> is an excellent read, and essential to understanding
-    this.  Writeup <a href="#discussion">below</a>.</p>
+    this.</p>
 
+    <p>Disclaimer: I'm not a game developer, and this is the first gamey thing
+    I've tried, so beware of the code.</p>
+
+    <p>Writeup <a href="#discussion">below</a> with ideas to try out with this.</p>
+
+    <hr>
 
     <h2>Game views</h2>
 
@@ -65,36 +73,37 @@
     </div>
 
     <br>
-    <hr>
 
     <div id="server">
-        <h3>Server</h3>
+        <h3>Server (autoritative state)</h3>
         <label>Update rate (aka tick rate): <input class="tickRate" type="text" value="1"> per second</label>
         <br>
         <canvas id="serverCanvas" width=960 height=100></canvas>
     </div>
 
-    <h2 id="discussion">Discussion</h2>
+    <h2 id="discussion">Things to try</h2>
 
-    <p>I made this in order to better understand the concepts shown in
-    the original, and to learn about developing TypeScript projects.</p>
+    <p>With default settings, move player 3 around. Note how smoothly player
+    3's view renders.  Now move player 1 or player 2 the same way and note how
+    slow or jumpy their views update.  This shows the effect of client
+    prediction and input reconciliation. (Same as Gabriel's original
+    demo.)</p>
 
-    <p>TODO: add something to demonstrate lag compensation.</p>
+    <p>Now observe player 3's view as you move player 1 a& 2 around.  Note how
+    players  1 and 2 move smoothly -- but delayed -- compared to everyone
+    else's view.  This is entity interpolation at work.</p>
 
-    <h2>Things to try</h2>
-
-    <p>Move player 3 (e.g. hold down 'c' or 'z'). Note how smoothly the player
-    3 view renders.  Now move player 1 or player 2 the same way and note how
-    slow or jumpy they are.  This shows the effect of client prediction and
-    input reconciliation. (Same as Gabriel's original demo.)</p>
-
-    <p>With default settings, move player 1 (e.g. hold down 'e') and observe
-    player 3's view compared to other players.  This is entity interpolation
-    at work.  All players are receiving world updates only once a second, but
-    player 3 renders player 1's position smoothly.</p>
+    <p>Turn entity interpolation on for all players, but give player 1 and 2
+    very different lag values (say 2000 ms, and 20ms).  Then move player 3
+    around and observe how the other players see the state of the world.  Note
+    how the high-lag player's view of the world is considerably delayed, but
+    still smooth.</p>
 
     <p>Check out the recommendations for things to try in the <a
     href="http://www.gabrielgambetta.com/fpm_live.html">original demo</a>.</p>
+
+    <p>TODO: add something to demonstrate lag compensation, the remaining
+    concept from the article series that is not demonstrated.</p>
 
     <script src="./dist/bundle.js"></script>
 </body>
